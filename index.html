@@ -692,27 +692,26 @@
       // Build the wave surface path
       const surfacePts = buildSeaSurface(t, waveAmp);
 
-      // --- Wet sand shadow: a polygon following the ANIMATED wave surface ---
-      // Build a closed shape: wave surface top edge (shifted up by wetBand px)
-      // then wave surface bottom edge in reverse — this tracks the actual waterline
-      // perfectly with no gaps even at high tide.
+      // --- Wet sand shadow: a STATIC polygon anchored to the base tide curve ---
+      // Uses interpolateSeaY (no animation) so the damp-sand band stays still
+      // while the animated wave slides over it.
       const wetBand = 28;
+      const wetStep = 4; // sample every 4px — smooth enough, cheap
       ctx.save();
       ctx.beginPath();
-      // Top edge of wet band: surface pts shifted up by wetBand
-      ctx.moveTo(surfacePts[0].x, surfacePts[0].y - wetBand);
-      for (let i = 1; i < surfacePts.length; i++) {
-        ctx.lineTo(surfacePts[i].x, surfacePts[i].y - wetBand);
+      // Top edge: base tide line shifted up by wetBand
+      ctx.moveTo(0, interpolateSeaY(0) - wetBand);
+      for (let x = wetStep; x <= W; x += wetStep) {
+        ctx.lineTo(x, interpolateSeaY(x) - wetBand);
       }
-      // Bottom edge: the wave surface itself, traced back right-to-left
-      for (let i = surfacePts.length - 1; i >= 0; i--) {
-        ctx.lineTo(surfacePts[i].x, surfacePts[i].y);
+      // Bottom edge: base tide line itself, traced right-to-left
+      for (let x = W; x >= 0; x -= wetStep) {
+        ctx.lineTo(x, interpolateSeaY(x));
       }
       ctx.closePath();
-      // Gradient: transparent at top of band, dark-sand tint at waterline
-      // Use the minimum sea Y (highest tide = topmost surface) for gradient extent
-      const minSurfaceY = Math.min(...surfacePts.map(p => p.y));
-      const wetGrad = ctx.createLinearGradient(0, minSurfaceY - wetBand, 0, minSurfaceY + 4);
+      // Gradient: transparent at top, damp-sand tint at the waterline
+      const minBaseY = Math.min(...seaYPoints);
+      const wetGrad = ctx.createLinearGradient(0, minBaseY - wetBand, 0, minBaseY + 4);
       wetGrad.addColorStop(0, 'rgba(130,105,35,0)');
       wetGrad.addColorStop(1, 'rgba(100,78,22,0.40)');
       ctx.fillStyle = wetGrad;

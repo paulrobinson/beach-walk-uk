@@ -16,7 +16,7 @@
       --white: #FFFFFF;
       --text-muted: #7A7974;
       --border: #D4C5B0;
-      --card-bg: rgba(255,255,255,0.55);
+      --card-bg: #F7F4F0;
       --font: 'Satoshi', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       /* Each hour column is 52px wide — both strip and canvas use this */
       --col-w: 52px;
@@ -126,7 +126,6 @@
     /* WEATHER STRIP */
     .weather-strip-container {
       background: var(--card-bg);
-      backdrop-filter: blur(10px);
       border-bottom: 1px solid var(--border);
     }
     .weather-strip {
@@ -493,7 +492,7 @@
       const btn = document.createElement('button');
       btn.className = 'day-tab' + (i === selectedDayIndex ? ' active' : '');
       btn.textContent = date === today ? 'Today' : (i === 1 && dates[0] === today) ? 'Tomorrow' : getDayName(date);
-      btn.addEventListener('click', () => { selectedDayIndex = i; renderDayTabs(data); renderDay(data); });
+      btn.addEventListener('click', () => { selectedDayIndex = i; renderDayTabs(data); renderDay(data, false); });
       el.appendChild(btn);
     });
   }
@@ -693,27 +692,31 @@
       // Build the wave surface path
       const surfacePts = buildSeaSurface(t, waveAmp);
 
-      // --- Wet sand shadow: a semi-transparent band just above the waterline ---
-      // Draw it BEFORE the sea fill so it shows on sand (not on sea)
+      // --- Wet sand shadow: a polygon following the ANIMATED wave surface ---
+      // Build a closed shape: wave surface top edge (shifted up by wetBand px)
+      // then wave surface bottom edge in reverse — this tracks the actual waterline
+      // perfectly with no gaps even at high tide.
+      const wetBand = 28;
       ctx.save();
-      // Clip to everything ABOVE the wave surface
-      applyPath(surfacePts);
-      ctx.lineTo(W, 0);
-      ctx.lineTo(0, 0);
-      ctx.closePath();
-      ctx.clip();
-
-      // Now draw the wet-sand gradient band
-      for (let x = 0; x <= W; x += 4) {
-        const sy = interpolateSeaY(x);
-        const bandTop = sy - 22;
-        if (bandTop < SAND_TOP) continue;
-        const wg = ctx.createLinearGradient(0, bandTop, 0, sy);
-        wg.addColorStop(0, 'rgba(130,105,35,0)');
-        wg.addColorStop(1, 'rgba(115,92,28,0.30)');
-        ctx.fillStyle = wg;
-        ctx.fillRect(x, bandTop, 4, 22);
+      ctx.beginPath();
+      // Top edge of wet band: surface pts shifted up by wetBand
+      ctx.moveTo(surfacePts[0].x, surfacePts[0].y - wetBand);
+      for (let i = 1; i < surfacePts.length; i++) {
+        ctx.lineTo(surfacePts[i].x, surfacePts[i].y - wetBand);
       }
+      // Bottom edge: the wave surface itself, traced back right-to-left
+      for (let i = surfacePts.length - 1; i >= 0; i--) {
+        ctx.lineTo(surfacePts[i].x, surfacePts[i].y);
+      }
+      ctx.closePath();
+      // Gradient: transparent at top of band, dark-sand tint at waterline
+      // Use the minimum sea Y (highest tide = topmost surface) for gradient extent
+      const minSurfaceY = Math.min(...surfacePts.map(p => p.y));
+      const wetGrad = ctx.createLinearGradient(0, minSurfaceY - wetBand, 0, minSurfaceY + 4);
+      wetGrad.addColorStop(0, 'rgba(130,105,35,0)');
+      wetGrad.addColorStop(1, 'rgba(100,78,22,0.40)');
+      ctx.fillStyle = wetGrad;
+      ctx.fill();
       ctx.restore();
 
       // --- Main sea fill ---
@@ -775,14 +778,20 @@
       }
       ctx.restore();
 
-      // === DARKNESS OVERLAY (per-column) ===
+      // === DARKNESS OVERLAY — single horizontal linear gradient, no column banding ===
+      // Build ordered stops: left edge, each column centre, right edge
+      const darkGrad = ctx.createLinearGradient(0, 0, W, 0);
+      // Left edge anchored to first hour's darkness
+      darkGrad.addColorStop(0, `rgba(10,20,40,${darknessAlpha(hours[0].hour, sunTimes)})`);
+      // Each column centre
       hours.forEach((h, i) => {
-        const alpha = darknessAlpha(h.hour, sunTimes);
-        if (alpha < 0.01) return;
-        const x = i * colW;
-        ctx.fillStyle = `rgba(10,20,40,${alpha})`;
-        ctx.fillRect(x, 0, colW, H);
+        const stopPos = Math.max(0.001, Math.min(0.999, (i + 0.5) * colW / W));
+        darkGrad.addColorStop(stopPos, `rgba(10,20,40,${darknessAlpha(h.hour, sunTimes)})`);
       });
+      // Right edge anchored to last hour's darkness
+      darkGrad.addColorStop(1, `rgba(10,20,40,${darknessAlpha(hours[hours.length - 1].hour, sunTimes)})`);
+      ctx.fillStyle = darkGrad;
+      ctx.fillRect(0, 0, W, H);
 
       animFrame = requestAnimationFrame(drawFrame);
     }
@@ -791,7 +800,7 @@
     animFrame = requestAnimationFrame(drawFrame);
   }
 
-  function renderDay(data) {
+  function renderDay(data, doScrollToNow) {
     const dayData = extractDayData(data, selectedDayIndex);
     if (!dayData) return;
     const best = computeBestWindow(dayData.hours, dayData.seaMin, dayData.seaMax);
@@ -799,6 +808,23 @@
     renderWeatherStrip(dayData, best);
     renderBestTimeBanner(best);
     renderBeachCanvas(dayData);
+
+    // Scroll to current hour on Today tab if requested
+    if (doScrollToNow && selectedDayIndex === 0) {
+      const wrapper = document.getElementById('scrollWrapper');
+      const now = new Date();
+      const currentHour = now.getHours();
+      const currentIdx = dayData.hours.findIndex(h => h.hour >= currentHour);
+      if (currentIdx >= 0) {
+        // Get the actual CSS column width (may be dynamic on wide screens)
+        const colEl = wrapper.querySelector('.weather-col');
+        const colW = colEl ? colEl.offsetWidth : 52;
+        const viewW = wrapper.offsetWidth;
+        // Centre the current column in the viewport (but never go negative)
+        const targetScroll = Math.max(0, currentIdx * colW - viewW / 2 + colW / 2);
+        wrapper.scrollLeft = targetScroll;
+      }
+    }
   }
 
   function showSkeleton() {
@@ -835,9 +861,9 @@
       allData = data;
       document.getElementById('loadingOverlay').classList.add('hidden');
       renderDayTabs(data);
-      renderDay(data);
+      renderDay(data, true);
       let rt;
-      window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => renderDay(data), 100); });
+      window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => renderDay(data, false), 100); });
     } catch (err) {
       console.error('Load failed:', err);
       document.getElementById('loadingOverlay').classList.add('hidden');

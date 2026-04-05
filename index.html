@@ -483,7 +483,7 @@
     if (!force && memCache && Date.now() - memCache.ts < 30 * 60 * 1000) return memCache;
     const [wRes, mRes] = await Promise.all([
       fetch(`https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LON}&hourly=temperature_2m,weather_code,wind_speed_10m,wind_gusts_10m,precipitation&timezone=Europe/London&forecast_days=4`),
-      fetch(`https://marine-api.open-meteo.com/v1/marine?latitude=${LAT}&longitude=${LON}&hourly=sea_level_height_msl,wave_height&timezone=Europe/London&forecast_days=4`)
+      fetch(`https://marine-api.open-meteo.com/v1/marine?latitude=${LAT}&longitude=${LON}&hourly=sea_level_height_msl,wave_height,sea_surface_temperature&timezone=Europe/London&forecast_days=4`)
     ]);
     if (!wRes.ok || !mRes.ok) throw new Error('API error');
     const weather = await wRes.json();
@@ -528,10 +528,14 @@
         precip: w.precipitation[wi] || 0,
         seaLevel: mi !== -1 ? (m.sea_level_height_msl[mi] ?? 0) : 0,
         waveHeight: mi !== -1 ? (m.wave_height[mi] ?? 0) : 0,
+        seaSurfaceTemp: mi !== -1 ? (m.sea_surface_temperature ? (m.sea_surface_temperature[mi] ?? null) : null) : null,
       });
     }
     const allSea = m.sea_level_height_msl.filter(v => v != null);
-    return { hours, date: targetDate, seaMin: Math.min(...allSea), seaMax: Math.max(...allSea), dates, hoursStart: HOURS_START, hoursEnd: HOURS_END };
+    // Average SST across the day (it barely changes hour-to-hour)
+    const sstVals = hours.map(h => h.seaSurfaceTemp).filter(v => v != null);
+    const avgSST = sstVals.length ? (sstVals.reduce((a, b) => a + b, 0) / sstVals.length) : null;
+    return { hours, date: targetDate, seaMin: Math.min(...allSea), seaMax: Math.max(...allSea), dates, hoursStart: HOURS_START, hoursEnd: HOURS_END, avgSST };
   }
 
   function computeBestWindow(hours, seaMin, seaMax) {
@@ -847,6 +851,78 @@
       darkGrad.addColorStop(1, `rgba(10,20,40,${darknessAlpha(hours[hours.length - 1].hour, sunTimes)})`);
       ctx.fillStyle = darkGrad;
       ctx.fillRect(0, 0, W, H);
+
+      // === SEA SURFACE TEMPERATURE BADGE ===
+      if (dayData.avgSST != null) {
+        const sstTemp = Math.round(dayData.avgSST);
+        const font = 'Satoshi, -apple-system, BlinkMacSystemFont, sans-serif';
+        const badgeX = W / 2;
+        const badgeY = H * 0.80;
+        const padX = 14, padY = 7;
+        ctx.save();
+
+        // Measure both lines
+        ctx.font = `700 15px ${font}`;
+        const tempText = sstTemp + '\u00B0C';
+        const tw1 = ctx.measureText(tempText).width;
+        ctx.font = `500 10px ${font}`;
+        const labelText = 'WATER TEMP';
+        const tw2 = ctx.measureText(labelText).width;
+        const innerW = Math.max(tw1, tw2);
+
+        // Include a small wave icon gap to the left
+        const waveGap = 18;
+        const bw = innerW + padX * 2 + waveGap;
+        const bh = 38;
+        const bx = badgeX - bw / 2;
+        const by = badgeY - bh / 2;
+
+        // Pill background
+        ctx.fillStyle = 'rgba(8, 32, 70, 0.65)';
+        ctx.beginPath();
+        ctx.roundRect(bx, by, bw, bh, bh / 2);
+        ctx.fill();
+
+        // Subtle border
+        ctx.strokeStyle = 'rgba(100, 170, 255, 0.3)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.roundRect(bx, by, bw, bh, bh / 2);
+        ctx.stroke();
+
+        // Wave icon (3 small arcs on the left)
+        const wx = bx + 14;
+        const wy = badgeY;
+        ctx.strokeStyle = 'rgba(100,200,255,0.85)';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(wx - 5, wy - 2);
+        ctx.quadraticCurveTo(wx - 2, wy - 7, wx + 1, wy - 2);
+        ctx.quadraticCurveTo(wx + 4, wy + 3, wx + 7, wy - 2);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(wx - 5, wy + 4);
+        ctx.quadraticCurveTo(wx - 2, wy - 1, wx + 1, wy + 4);
+        ctx.quadraticCurveTo(wx + 4, wy + 9, wx + 7, wy + 4);
+        ctx.stroke();
+
+        // Temperature value (large)
+        const textX = bx + waveGap + padX + innerW / 2;
+        ctx.fillStyle = 'rgba(255,255,255,0.96)';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.font = `700 15px ${font}`;
+        ctx.fillText(tempText, textX, badgeY - 7);
+
+        // "WATER TEMP" label (small, muted)
+        ctx.fillStyle = 'rgba(150,210,255,0.80)';
+        ctx.font = `500 9.5px ${font}`;
+        ctx.letterSpacing = '0.04em';
+        ctx.fillText(labelText, textX, badgeY + 8);
+        ctx.letterSpacing = '0';
+
+        ctx.restore();
+      }
 
       // === CURRENT HOUR LINE (Today only) ===
       if (selectedDayIndex === 0) {

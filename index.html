@@ -77,7 +77,9 @@
       .updated-icon { opacity: 0.5; }
     }
     .header-logo svg { width: 34px; height: 34px; }
-    .header-title { font-size: 1.3rem; font-weight: 700; letter-spacing: -0.02em; }
+    .header-title { font-size: 1.3rem; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 1px; }
+    .header-tagline { font-size: 0.68rem; font-weight: 400; color: rgba(255,255,255,0.45); letter-spacing: 0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .header-title-wrap { min-width: 0; flex: 1; }
     .day-tabs { display: flex; gap: 6px; flex-wrap: nowrap; overflow-x: auto; flex: 1; min-width: 0; scrollbar-width: none; padding-right: 4px; }
     .day-tabs::-webkit-scrollbar { display: none; }
     .day-tab {
@@ -431,7 +433,10 @@
         </g>
       </svg>
     </div>
-    <h1 class="header-title">Beach Walk UK</h1>
+    <div class="header-title-wrap">
+      <h1 class="header-title">Beach Walk UK</h1>
+      <p class="header-tagline">Find the best time to walk on your local beach</p>
+    </div>
     <button class="location-btn" id="locationBtn" onclick="openLocationPicker()">
       <svg width="12" height="14" viewBox="0 0 12 14" fill="none">
         <path d="M6 0C3.79 0 2 1.79 2 4c0 3 4 8 4 8s4-5 4-8c0-2.21-1.79-4-4-4zm0 5.5a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3z" fill="currentColor"/>
@@ -1291,7 +1296,7 @@ const BATHING_WATERS = [
         : `<div class="weather-precip-empty"></div>`;
       // Gust: always render slot, blank when not significant
       const gustHtml = h.showGust
-        ? `<div class="weather-gust">G:${h.gustMph}</div>`
+        ? `<div class="weather-gust">Gusts:${h.gustMph}</div>`
         : `<div class="weather-gust-empty"></div>`;
       return `<div class="weather-col${isBest ? ' best-hour' : ''}${isCurrent ? ' current-hour' : ''}">
         <div class="weather-temp">${Math.round(h.temp)}°</div>

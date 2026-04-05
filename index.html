@@ -257,6 +257,110 @@
     }
     .error-state button:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
 
+    /* LOCATION BUTTON */
+    .location-btn {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      background: rgba(255,255,255,0.1);
+      border: 1.5px solid rgba(255,255,255,0.2);
+      border-radius: 16px;
+      color: rgba(255,255,255,0.8);
+      font-family: var(--font);
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 4px 10px 4px 8px;
+      cursor: pointer;
+      transition: background 0.2s, border-color 0.2s;
+      white-space: nowrap;
+      max-width: 160px;
+    }
+    .location-btn:hover { background: rgba(255,255,255,0.18); border-color: rgba(255,255,255,0.4); }
+    .location-btn .loc-name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .location-btn svg { flex-shrink: 0; opacity: 0.75; }
+
+    /* LOCATION PICKER MODAL */
+    .loc-overlay {
+      position: fixed; inset: 0;
+      background: rgba(10,20,40,0.55);
+      z-index: 900;
+      display: none;
+      align-items: flex-end;
+      justify-content: center;
+    }
+    .loc-overlay.open { display: flex; }
+    .loc-sheet {
+      background: var(--white);
+      border-radius: 20px 20px 0 0;
+      width: 100%;
+      max-width: 560px;
+      max-height: 80vh;
+      display: flex;
+      flex-direction: column;
+      padding-bottom: env(safe-area-inset-bottom, 0);
+      animation: sheetUp 0.25s ease;
+    }
+    @keyframes sheetUp {
+      from { transform: translateY(40px); opacity: 0; }
+      to   { transform: translateY(0);   opacity: 1; }
+    }
+    .loc-sheet-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 18px 20px 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    .loc-sheet-header h2 { font-size: 1rem; font-weight: 700; color: var(--navy); }
+    .loc-close {
+      background: none; border: none; cursor: pointer;
+      color: var(--text-muted); font-size: 1.4rem; line-height: 1;
+      padding: 2px 4px;
+    }
+    .loc-search-wrap {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .loc-search {
+      width: 100%;
+      padding: 9px 14px;
+      border-radius: 10px;
+      border: 1.5px solid var(--border);
+      font-family: var(--font);
+      font-size: 0.88rem;
+      background: var(--bg);
+      color: var(--navy);
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .loc-search:focus { border-color: #3498db; }
+    .loc-list {
+      overflow-y: auto;
+      flex: 1;
+      padding: 6px 0 12px;
+    }
+    .loc-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 11px 20px;
+      cursor: pointer;
+      transition: background 0.15s;
+      border-bottom: 1px solid rgba(0,0,0,0.04);
+    }
+    .loc-item:hover { background: var(--bg); }
+    .loc-item.active { background: rgba(52,152,219,0.08); }
+    .loc-item-name { font-size: 0.88rem; font-weight: 600; color: var(--navy); }
+    .loc-item-type { font-size: 0.72rem; color: var(--text-muted); margin-top: 1px; }
+    .loc-item-tick { margin-left: auto; color: #3498db; font-size: 1rem; display: none; }
+    .loc-item.active .loc-item-tick { display: block; }
+    .loc-loading { padding: 24px; text-align: center; color: var(--text-muted); font-size: 0.85rem; }
+    .loc-empty { padding: 24px; text-align: center; color: var(--text-muted); font-size: 0.85rem; }
+
     /* FOOTER */
     .footer { text-align: center; padding: 24px 20px; font-size: 0.75rem; color: var(--text-muted); line-height: 1.6; }
     .footer a { color: #2980b9; text-decoration: none; font-weight: 500; }
@@ -317,7 +421,15 @@
         </g>
       </svg>
     </div>
-    <h1 class="header-title">Beach Walk UK</h1>
+    <div>
+      <h1 class="header-title">Beach Walk UK</h1>
+      <button class="location-btn" id="locationBtn" onclick="openLocationPicker()">
+        <svg width="12" height="14" viewBox="0 0 12 14" fill="none">
+          <path d="M6 0C3.79 0 2 1.79 2 4c0 3 4 8 4 8s4-5 4-8c0-2.21-1.79-4-4-4zm0 5.5a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3z" fill="currentColor"/>
+        </svg>
+        <span class="loc-name" id="locationBtnName">Whitley Bay</span>
+      </button>
+    </div>
     <div class="updated-time" id="updatedTime">
       <div class="updated-label">Updated <span class="refresh-dot" id="refreshDot"></span></div>
       <span class="updated-ts" id="updatedTs">—</span>
@@ -349,17 +461,162 @@
 </main>
 
 <footer class="footer">
-  <span class="location">Whitley Bay, Tyne &amp; Wear</span>
+  <span class="location" id="footerLocation">Whitley Bay</span>
   Data from <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a>
 </footer>
+
+<!-- Location picker modal -->
+<div class="loc-overlay" id="locOverlay" onclick="handleOverlayClick(event)">
+  <div class="loc-sheet">
+    <div class="loc-sheet-header">
+      <h2>Choose a beach</h2>
+      <button class="loc-close" onclick="closeLocationPicker()" aria-label="Close">&times;</button>
+    </div>
+    <div class="loc-search-wrap">
+      <input class="loc-search" id="locSearch" type="search" placeholder="Search beaches…" autocomplete="off" oninput="filterLocations(this.value)">
+    </div>
+    <div class="loc-list" id="locList">
+      <div class="loc-loading">Loading beaches…</div>
+    </div>
+  </div>
+</div>
 
 <script>
 (function() {
   'use strict';
 
-  const LAT = 55.0464, LON = -1.4444;
   const KMH_TO_MPH = 0.621371;
-  // HOURS_START / HOURS_END are computed dynamically per day based on sun times
+
+  // ── Location state ────────────────────────────────────────────────────────
+  const DEFAULT_LOCATION = { name: 'Whitley Bay', lat: 55.0464, lon: -1.4444, type: 'Coastal' };
+  const LS_KEY = 'beachWalkLocation';
+
+  function loadSavedLocation() {
+    try {
+      const saved = localStorage.getItem(LS_KEY);
+      if (saved) return JSON.parse(saved);
+    } catch(e) {}
+    return DEFAULT_LOCATION;
+  }
+
+  function saveLocation(loc) {
+    try { localStorage.setItem(LS_KEY, JSON.stringify(loc)); } catch(e) {}
+  }
+
+  let currentLocation = loadSavedLocation();
+
+  function getLat() { return currentLocation.lat; }
+  function getLon() { return currentLocation.lon; }
+
+  function applyLocationUI() {
+    const name = currentLocation.name;
+    const btnEl = document.getElementById('locationBtnName');
+    if (btnEl) btnEl.textContent = name;
+    const footerEl = document.getElementById('footerLocation');
+    if (footerEl) footerEl.textContent = name;
+  }
+
+  // ── EA Bathing Water API ──────────────────────────────────────────────────
+  const EA_API = 'https://environment.data.gov.uk/bwq/profiles/api/bathing-water?_format=json&_limit=500';
+  let bathingWaters = null; // cached list
+  let allLocationsFiltered = [];
+
+  async function fetchBathingWaters() {
+    if (bathingWaters) return bathingWaters;
+    const res = await fetch(EA_API);
+    if (!res.ok) throw new Error('EA API error ' + res.status);
+    const json = await res.json();
+    // Normalise into { name, lat, lon, type } objects, sorted A-Z
+    bathingWaters = (json.items || json)
+      .filter(b => b.samplingPoint && b.samplingPoint.lat && b.samplingPoint.long)
+      .map(b => ({
+        name: b.name || b.samplingPoint.name,
+        lat:  parseFloat(b.samplingPoint.lat),
+        lon:  parseFloat(b.samplingPoint.long),
+        type: (b.bathingWaterType || '').includes('Inland') ? 'Inland' : 'Coastal'
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    return bathingWaters;
+  }
+
+  // ── Location picker modal (called from inline HTML) ───────────────────────
+  window.openLocationPicker = async function() {
+    document.getElementById('locOverlay').classList.add('open');
+    document.getElementById('locSearch').value = '';
+    renderLocList(null); // show loading state
+    try {
+      const locs = await fetchBathingWaters();
+      allLocationsFiltered = locs;
+      renderLocList(locs);
+      // Focus search after list renders
+      setTimeout(() => document.getElementById('locSearch').focus(), 50);
+    } catch(e) {
+      document.getElementById('locList').innerHTML =
+        '<div class="loc-empty">Could not load beach list. Check your connection.</div>';
+    }
+  };
+
+  window.closeLocationPicker = function() {
+    document.getElementById('locOverlay').classList.remove('open');
+  };
+
+  window.handleOverlayClick = function(e) {
+    if (e.target === document.getElementById('locOverlay')) closeLocationPicker();
+  };
+
+  window.filterLocations = function(query) {
+    if (!bathingWaters) return;
+    const q = query.trim().toLowerCase();
+    const filtered = q ? bathingWaters.filter(l => l.name.toLowerCase().includes(q)) : bathingWaters;
+    allLocationsFiltered = filtered;
+    renderLocList(filtered);
+  };
+
+  function renderLocList(locs) {
+    const el = document.getElementById('locList');
+    if (!locs) { el.innerHTML = '<div class="loc-loading">Loading beaches…</div>'; return; }
+    if (!locs.length) { el.innerHTML = '<div class="loc-empty">No beaches found</div>'; return; }
+    el.innerHTML = locs.map(l => {
+      const isActive = l.name === currentLocation.name && Math.abs(l.lat - currentLocation.lat) < 0.001;
+      return `<div class="loc-item${isActive ? ' active' : ''}" onclick="selectLocation(${JSON.stringify(l).replace(/"/g,'&quot;')})">
+        <div>
+          <div class="loc-item-name">${l.name}</div>
+          <div class="loc-item-type">${l.type} bathing water</div>
+        </div>
+        <span class="loc-item-tick">✓</span>
+      </div>`;
+    }).join('');
+    // Scroll active item into view
+    const active = el.querySelector('.loc-item.active');
+    if (active) active.scrollIntoView({ block: 'nearest' });
+  }
+
+  window.selectLocation = async function(loc) {
+    currentLocation = loc;
+    saveLocation(loc);
+    applyLocationUI();
+    closeLocationPicker();
+    // Clear cache and reload data for new location
+    memCache = null;
+    selectedDayIndex = 0;
+    document.getElementById('mainContent').style.display = '';
+    document.getElementById('errorState').classList.remove('visible');
+    document.getElementById('loadingOverlay').classList.remove('hidden');
+    try {
+      showSkeleton();
+      const data = await fetchAllData();
+      allData = data;
+      document.getElementById('loadingOverlay').classList.add('hidden');
+      renderDayTabs(data);
+      renderDay(data, true);
+    } catch(err) {
+      document.getElementById('loadingOverlay').classList.add('hidden');
+      document.getElementById('errorState').classList.add('visible');
+      document.getElementById('mainContent').style.display = 'none';
+    }
+  };
+
+  // ── HOURS_START / HOURS_END are computed dynamically per day based on sun times
   // (sunrise - 1h) to (sunset + 1h), clamped to 0–23
   function getDayHourRange(dateStr) {
     const st = getSunTimes(dateStr);
@@ -369,13 +626,12 @@
     };
   }
 
-  // Approximate sunrise/sunset for Whitley Bay (55.05°N) using a simplified formula.
+  // Sunrise/sunset approximation using the current location's latitude.
   // Returns {sunrise, sunset} as decimal hours in local time.
   function getSunTimes(dateStr) {
     const date = new Date(dateStr + 'T12:00:00');
     const dayOfYear = Math.floor((date - new Date(date.getFullYear(), 0, 0)) / 86400000);
-    // Simple astronomical approximation
-    const latRad = LAT * Math.PI / 180;
+    const latRad = getLat() * Math.PI / 180;
     const decl = -23.45 * Math.PI / 180 * Math.cos(2 * Math.PI / 365 * (dayOfYear + 10));
     const cosHa = -Math.tan(latRad) * Math.tan(decl);
     if (cosHa >= 1) return { sunrise: 12, sunset: 12 }; // polar night
@@ -464,9 +720,10 @@
 
   async function fetchAllData(force) {
     if (!force && memCache && Date.now() - memCache.ts < 30 * 60 * 1000) return memCache;
+    const lat = getLat(), lon = getLon();
     const [wRes, mRes] = await Promise.all([
-      fetch(`https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LON}&hourly=temperature_2m,weather_code,wind_speed_10m,wind_gusts_10m,precipitation&timezone=Europe/London&forecast_days=4`),
-      fetch(`https://marine-api.open-meteo.com/v1/marine?latitude=${LAT}&longitude=${LON}&hourly=sea_level_height_msl,wave_height,sea_surface_temperature&timezone=Europe/London&forecast_days=4`)
+      fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=temperature_2m,weather_code,wind_speed_10m,wind_gusts_10m,precipitation&timezone=Europe/London&forecast_days=4`),
+      fetch(`https://marine-api.open-meteo.com/v1/marine?latitude=${lat}&longitude=${lon}&hourly=sea_level_height_msl,wave_height,sea_surface_temperature&timezone=Europe/London&forecast_days=4`)
     ]);
     if (!wRes.ok || !mRes.ok) throw new Error('API error');
     const weather = await wRes.json();
@@ -988,6 +1245,7 @@
   }
 
   async function init() {
+    applyLocationUI();
     showSkeleton();
     try {
       const data = await fetchAllData();

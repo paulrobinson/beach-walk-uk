@@ -1769,11 +1769,14 @@ const BATHING_WATERS = [
     const seaMax = dayData.seaMax;
     const seaRange = seaMax - seaMin || 1;
 
-    // Decide tick values — round to nearest 0.5m, cover seaMin→seaMax
-    const tickStep = seaRange <= 2 ? 0.5 : 1.0;
-    const firstTick = Math.ceil(seaMin / tickStep) * tickStep;
+    // Shift values so 0m = lowest tide of the day (pseudo Chart Datum)
+    // This avoids confusing negative MSL values and matches user expectations
+    const displayRange = seaRange; // same span, just shifted
+
+    // Decide tick values — always 0 at bottom, step up in 0.5m or 1m increments
+    const tickStep = displayRange <= 2 ? 0.5 : 1.0;
     const ticks = [];
-    for (let v = firstTick; v <= seaMax + 0.001; v += tickStep) {
+    for (let v = 0; v <= displayRange + 0.001; v += tickStep) {
       ticks.push(parseFloat(v.toFixed(2)));
     }
 
@@ -1795,8 +1798,9 @@ const BATHING_WATERS = [
     ctx.stroke();
 
     // Draw ticks + labels
-    ticks.forEach(v => {
-      const norm = (v - seaMin) / seaRange;
+    // displayVal = seaLevel - seaMin (so 0 = low tide, displayRange = high tide)
+    ticks.forEach(displayVal => {
+      const norm = displayVal / displayRange;
       const y = SEA_Y_LOW - norm * (SEA_Y_LOW - SEA_Y_HIGH);
 
       // Tick mark
@@ -1807,13 +1811,12 @@ const BATHING_WATERS = [
       ctx.lineTo(AXIS_W - 1, y);
       ctx.stroke();
 
-      // Label
-      const label = v % 1 === 0 ? v.toFixed(0) + 'm' : v.toFixed(1) + 'm';
+      // Label: e.g. "0m", "0.5m", "1m"
+      const label = displayVal % 1 === 0 ? displayVal.toFixed(0) + 'm' : displayVal.toFixed(1) + 'm';
       ctx.fillStyle = 'rgba(255,255,255,0.7)';
       ctx.font = `600 9px -apple-system, sans-serif`;
       ctx.textAlign = 'right';
       ctx.textBaseline = 'middle';
-      // Don't draw if too close to the edge
       if (y > 8 && y < H - 8) {
         ctx.fillText(label, AXIS_W - 9, y);
       }
